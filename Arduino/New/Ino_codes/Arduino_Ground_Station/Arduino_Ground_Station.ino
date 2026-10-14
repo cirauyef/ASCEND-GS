@@ -57,7 +57,19 @@
 #include <Wire.h>
 #include <Tic.h>
 
+// GPS sensor
+#include <Adafruit_GPS.h>
+#include <SoftwareSerial.h>
+
 // Defines for GPS Parsing
+// page 2 of https://www.rhydolabz.com/documents/25/NMEA-CommandManual_%28FTX-HW-13002%29.pdf
+/* bit positions in data field:
+ *  0: GPGLL (lat/lon)
+ *  1: GPRMC (recommended minimum)
+ * 17: GPZDA (time/date)
+ */
+#define PMTK_NMEA_OUTPUT_CONFIG "$PMTK314,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28"
+#define PMTK_NMEA_UPDATE_1HZ "$PMTK220,1000*1F"
 
 /* NOT USED CURRENTLY need to parse time and date to use
 typedef struct {
@@ -106,6 +118,10 @@ bool zerolever = false;
 static bool lastZeroLever = false;
 //debug defines
 float promptalt, promptlong, promptlat;
+
+// GPS Sensor SoftwareSerial
+// TODO: pin numbers may be reversed
+SoftwareSerial gpsSerial(8, 7);
 
 bool readSerialMessage() {
   while (Serial.available()) {
@@ -267,12 +283,15 @@ bool debugpincheck(){
 
 void setup() {
   Serial.begin(115200);
+  gpsSerial.begin(9600);
   Serial.println(F("\nStarting... \n"));
 
   Wire.begin();
 
   delay(1000);             // delay to make sure serial is established
   pinMode(LIGHT, OUTPUT);  //Light for serial com
+  gpsSerial.println(PMTK_NMEA_OUTPUT_CONFIG);
+  gpsSerial.println(PMTK_NMEA_UPDATE_1HZ);
 
   // DEFINE SWITCHES AND LIGHTS RESPECIVELY HERE
 
@@ -361,6 +380,12 @@ void loop() {
     previous_x = gps.latitude;
 
   }  // end of gps valid if
+  String gpsOutput;
+  while (gpsSerial.available()) {
+    gpsOutput.concat(gpsSerial.read());
+  }
+  // steal `gps`
+  gps = extractGPS(gpsOutput.c_str());
 
   // checking states of lever
   joylever = joyleverCheck();
